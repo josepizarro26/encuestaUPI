@@ -1,0 +1,287 @@
+﻿<%@ Master Language="C#" AutoEventWireup="true" CodeBehind="EncuestaUPI.master.cs" Inherits="encuestaUPI.EncuestaUPI" %>
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.Globalization;
+using System.Web.UI;
+
+namespace Examen
+{
+    public partial class Examen : Page
+    {
+        private string cadenaConexion = "Data Source=DESKTOP-KSRM1D3;Initial Catalog=Cuestionario_UPI;Integrated Security=True";
+
+        protected void Page_Load(object sender, EventArgs e)
+        {
+            if (!IsPostBack)
+            {
+                txtFechaNacimiento.Text = DateTime.Today.ToShortDateString();
+            }
+        }
+
+        protected void btnGuardarEncuesta_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (CamposVacios())
+                {
+                    MostrarMensaje("Todos los campos son obligatorios.");
+                    return;
+                }
+
+                if (!ValidarEdad())
+                {
+                    MostrarMensaje("La edad debe estar entre 18 y 50 años.");
+                    return;
+                }
+
+                Encuesta encuesta = new Encuesta
+                {
+                    NombreParticipante = txtNombre.Text,
+                    Apellido = txtApellido.Text,
+                    FechaNacimiento = Convert.ToDateTime(txtFechaNacimiento.Text),
+                    CorreoElectronico = txtCorreo.Text,
+                    CarroPropio = radioSi.Checked ? "Si" : "No"
+                };
+
+                GuardarEncuestaBD(encuesta);
+
+                MostrarMensaje("Encuesta guardada correctamente.");
+                LimpiarCampos();
+            }
+            catch (Exception ex)
+            {
+                MostrarMensaje("Error al guardar la encuesta: " + ex.Message);
+            }
+        }
+
+        protected void btnLimpiarCampos_Click(object sender, EventArgs e)
+        {
+            LimpiarCampos();
+        }
+
+        protected void btnMostrarReporte_Click(object sender, EventArgs e)
+        {
+            MostrarReporte();
+        }
+
+        protected void btnSalir_Click(object sender, EventArgs e)
+        {
+            Response.Redirect("~/Default.aspx");
+        }
+
+        private bool CamposVacios()
+        {
+            return string.IsNullOrEmpty(txtNombre.Text) || string.IsNullOrEmpty(txtApellido.Text) || string.IsNullOrEmpty(txtCorreo.Text);
+        }
+
+        private bool ValidarEdad()
+        {
+            DateTime fechaNacimiento;
+            if (!DateTime.TryParseExact(txtFechaNacimiento.Text, "dd/MM/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out fechaNacimiento))
+            {
+                return false;
+            }
+
+            int edad = DateTime.Today.Year - fechaNacimiento.Year;
+            return edad >= 18 && edad <= 50;
+        }
+
+        private void LimpiarCampos()
+        {
+            txtNombre.Text = "";
+            txtApellido.Text = "";
+            txtCorreo.Text = "";
+            txtFechaNacimiento.Text = DateTime.Today.ToShortDateString();
+            radioSi.Checked = false;
+            radioNo.Checked = false;
+        }
+
+        private void MostrarMensaje(string mensaje)
+        {
+            ClientScript.RegisterStartupScript(this.GetType(), "alert", $"alert('{mensaje}');", true);
+        }
+
+        private void GuardarEncuestaBD(Encuesta encuesta)
+        {
+            using (SqlConnection conexion = new SqlConnection(cadenaConexion))
+            {
+                string query = "INSERT INTO informacion (Nombre_Participante, Apellido, Fecha_Nacimiento, Correo_Electronico, Carro_Propio) " +
+                               "VALUES (@Nombre_Participante, @Apellido, @Fecha_Nacimiento, @Correo_Electronico, @Carro_Propio)";
+
+                SqlCommand comando = new SqlCommand(query, conexion);
+                comando.Parameters.AddWithValue("@Nombre_Participante", encuesta.NombreParticipante);
+                comando.Parameters.AddWithValue("@Apellido", encuesta.Apellido);
+                comando.Parameters.AddWithValue("@Fecha_Nacimiento", encuesta.FechaNacimiento);
+                comando.Parameters.AddWithValue("@Correo_Electronico", encuesta.CorreoElectronico);
+                comando.Parameters.AddWithValue("@Carro_Propio", encuesta.CarroPropio);
+
+                conexion.Open();
+                comando.ExecuteNonQuery();
+            }
+        }
+
+        private void MostrarReporte()
+        {
+            string query = "SELECT * FROM informacion";
+
+            List<string[]> resultados = new List<string[]>();
+
+            using (SqlConnection conexion = new SqlConnection(cadenaConexion))
+            {
+                using (SqlCommand comando = new SqlCommand(query, conexion))
+                {
+                    conexion.Open();
+                    using (SqlDataReader reader = comando.ExecuteReader())
+                    {
+    
+                        while (reader.Read())
+                        {
+                            string[] fila = new string[5];
+                            fila[0] = reader["Nombre_Participante"].ToString();
+                            fila[1] = reader["Apellido"].ToString();
+                            fila[2] = ((DateTime)reader["Fecha_Nacimiento"]).ToShortDateString();
+                            fila[3] = reader["Correo_Electronico"].ToString();
+                            fila[4] = reader["Carro_Propio"].ToString();
+                            resultados.Add(fila);
+                        }
+                    }
+                }
+            }
+            string htmlTabla = "<table border='1'><tr><th>Nombre</th><th>Apellido</th><th>Fecha de Nacimiento</th><th>Correo Electrónico</th><th>Carro Propio</th></tr>";
+
+            foreach (var fila in resultados)
+            {
+                htmlTabla += "<tr>";
+                foreach (var columna in fila)
+                {
+                    htmlTabla += "<td>" + columna + "</td>";
+                }
+                htmlTabla += "</tr>";
+            }
+
+            htmlTabla += "</table>";
+
+            Response.Write(htmlTabla);
+        }
+
+    }
+
+    public class Encuesta
+    {
+        public string NombreParticipante { get; set; }
+        public string Apellido { get; set; }
+        public DateTime FechaNacimiento { get; set; }
+        public string CorreoElectronico { get; set; }
+        public string CarroPropio { get; set; }
+    }
+}
+<%@ Page Language="C#" AutoEventWireup="true" CodeBehind="Examen.aspx.cs" Inherits="Examen.Examen" %>
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head runat="server">
+    <title>Encuestas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 400px;
+            max-width: 90%;
+        }
+
+        h2 {
+            color: #007bff;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        input[type="text"], input[type="email"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .radio-group {
+            margin-bottom: 15px;
+        }
+
+        .radio-group label {
+            margin-right: 10px;
+        }
+
+        .button-group {
+            text-align: center;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <form id="form1" runat="server">
+        <div class="container">
+            <h2>Encuesta</h2>
+            <label for="txtNombre">Nombre:</label>
+            <asp:TextBox ID="txtNombre" runat="server" CssClass="form-control"></asp:TextBox>
+
+            <label for="txtApellido">Apellido:</label>
+            <asp:TextBox ID="txtApellido" runat="server" CssClass="form-control"></asp:TextBox>
+
+            <label for="txtFechaNacimiento">Fecha de Nacimiento:</label>
+            <asp:TextBox ID="txtFechaNacimiento" runat="server" CssClass="form-control"></asp:TextBox>
+
+            <label for="txtCorreo">Correo Electrónico:</label>
+            <asp:TextBox ID="txtCorreo" runat="server" CssClass="form-control"></asp:TextBox>
+
+            <div class="radio-group">
+                <label>Carro Propio:</label>
+                <asp:RadioButton ID="radioSi" runat="server" Text="Sí" GroupName="CarroPropio" />
+                <asp:RadioButton ID="radioNo" runat="server" Text="No" GroupName="CarroPropio" />
+            </div>
+
+            <div class="button-group">
+                <asp:Button ID="btnGuardarEncuesta" runat="server" Text="Guardar Encuesta" OnClick="btnGuardarEncuesta_Click" CssClass="btn btn-primary" />
+                <asp:Button ID="btnLimpiarCampos" runat="server" Text="Limpiar Campos" OnClick="btnLimpiarCampos_Click" CssClass="btn btn-secondary" />
+                <asp:Button ID="btnMostrarReporte" runat="server" Text="Mostrar Reporte" OnClick="btnMostrarReporte_Click" CssClass="btn btn-info" />
+                <asp:Button ID="btnSalir" runat="server" Text="Salir" OnClick="btnSalir_Click" CssClass="btn btn-danger" />
+            </div>
+        </div>
+    </form>
+</body>
+</html>
